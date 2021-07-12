@@ -1,0 +1,276 @@
+<!--/* Workaround for bug https://youtrack.jetbrains.com/issue/IDEA-132738 -->
+<!--@thymesVar id="post" type="your.package.Post"-->
+<!--@thymesVar id="title" type="String"-->
+<!--@thymesVar id="content" type="String"-->
+<!--*/-->
+<!DOCTYPE HTML>
+<html xmlns:th="http://thymeleaf.org" >
+<head>
+    <title>Dots</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <link href="css/dotscss.css" type="text/css">
+</head>
+<body>
+
+<h1>Welcome to <a href="/">Gamestudio</a>!</h1>
+<h1>Dots</h1>
+
+<button onclick="startGame()">New game</button>
+
+<!-- tu asi dam html kod pre canvas s hrou -->
+<div id="instructions">
+    <p>Click on neighbouring dots with same color.</p>
+    <p>Click on next move...</p>
+    <p>If you made a mistake, click on reset move.</p>
+    <p>If there are not any dots you can connect, click next move if field has not been shuffled yet.</p>
+</div>
+<div id="game">
+    <canvas id="canvas"></canvas>
+    <button id="nextmove" onclick="checkColorPos()">Next move</button>
+    <button id="resetmove" onclick="resetMove()">Reset move</button>
+</div>
+<div id="warnings">
+
+</div>
+<div id="status">
+
+</div>
+
+
+<h2>Scores</h2>
+<ol>
+    <li th:each="score : ${scores}">
+        <span th:text="${score.player}"></span>
+        <span th:text="${score.points}"></span>
+    </li>
+</ol>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+<script>
+    const canvas = document.getElementById("canvas"),
+        ctx = canvas.getContext('2d');
+    canvas.width = 240;
+    canvas.height = 240;
+    let midX = 20;
+    let midY = 20;
+    let pos = [];
+    let valCol = [];
+    let dotCount = 0;
+    let sumScore = 0;
+
+    function rgbToHex(r, g, b) {
+        if (r > 255 || g > 255 || b > 255)
+            throw "Invalid color component";
+        return ((r << 16) | (g << 8) | b).toString(16);
+    }
+
+    function getDotPos(canvas, event) {
+        let rect = canvas.getBoundingClientRect();
+        let x = event.clientX - rect.left;
+        let y = event.clientY - rect.top;
+        let posX = x;
+        const xx = x;
+        const yy = y;
+        let posY = y;
+        while (posX > 40) {
+            posX = posX - 40;
+        }
+        while (posY > 40) {
+            posY = posY - 40;
+        }
+        if (posX < 20) {
+            x = xx + (20 - posX);
+        } else {
+            x = xx - (posX - 20);
+        }
+        if (posY < 20) {
+            y = yy + (20 - posY);
+        } else {
+            y = yy - (posY - 20);
+        }
+        return [x,y];
+    }
+
+    function newDot(canvas,event) {
+        let val = getDotPos(canvas, event);
+        let valX = val[0];
+        let valY = val[1];
+        let p = ctx.getImageData(valX, valY, 1, 1).data;
+        let col = "#" + ("000000" + rgbToHex(p[0], p[1], p[2])).slice(-6);
+        valCol.push(col);
+        dotCount++;
+        pos.push(valX, valY);
+        ctx.beginPath();
+        ctx.arc(valX,valY,18,0,6.28318531);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+        return [pos,valCol];
+    }
+    canvas.addEventListener('mousedown', function (e) {
+        newDot(canvas,e)
+    });
+
+    function shuffleField(canvas) {
+        let p;
+        let shuffle = true;
+        let col;
+        let chcCol = new Array(6);
+        for (let i=0;i<6;i++) {
+            chcCol[i] = new Array(6);
+        }
+        for (let i=0;i<6;i++) {
+            for (let j=0;j<6;j++) {
+                p = ctx.getImageData(20+(40*i),20+(40*j),1,1).data;
+                col = "#" + ("000000" + rgbToHex(p[0],p[1],p[2])).slice(-6);
+                chcCol[i][j] = col;
+            }
+        }
+        for (let i=0;i<5;i++) {
+            for(let j=0;j<5;j++) {
+                if (chcCol[i][j] === chcCol[i][j+1] || chcCol[i][j] === chcCol[i+1][j]) {
+                    shuffle = false;
+                    return shuffle;
+                }
+            }
+        }
+        for (let i=0;i<5;i++) {
+            if (chcCol[i][5] === chcCol[i+1][5] || chcCol[5][i] === chcCol[5][i+1]) {
+                shuffle = false;
+                return shuffle;
+            }
+        }
+        return shuffle;
+    }
+
+    function checkColorPos() {
+        let score = 0;
+        let ctrlPos = 0;
+        let ctrlCol = 0;
+        let ctrl=0;
+        let shuffle = shuffleField();
+        if (shuffle === true) {
+            createDots();
+        }
+        if (pos.length < 3) {
+            document.getElementById("warnings").innerHTML = "You need to connect at least two dots.";
+            pos.splice(0,pos.length);
+            valCol.splice(0,valCol.length);
+            dotCount = 0;
+            return 0;
+        }
+        if (dotCount>0) {
+        //kontrola ci su bodky susediace:
+            for (let j = 1;j<dotCount;j++) {
+                if (pos[(j - 1) * 2] !== pos[j * 2] && pos[((j - 1) * 2) + 1] !== pos[(j * 2) + 1]) {
+                    ctrlPos = 1;
+                }
+            }
+            if (ctrlPos === 1) {
+                document.getElementById("warnings").innerHTML = "Connect only neighboring dots.";
+                return 0;
+            } else {
+                //kontrola ci maju bodky rovnaku farbu:
+                for (let l =1;l<dotCount;l++) {
+                    if (valCol[l] !== valCol[l - 1]) {
+                        ctrlCol = 1;
+                    }
+                }
+                if (ctrlCol === 1) {
+                    document.getElementById("warnings").innerHTML = "Connect only dots with same color.";
+                    return 0;
+                }
+                else {
+                    //kontrola ci nebola bodka uz oznacena:
+                    for (let j=0;j<(pos.length-2)/2;j++) {
+                        if (pos[pos.length-2] === pos[j*2] && pos[pos.length-1] === pos[(j*2)+1]) {
+                            ctrl = 1;
+                        }
+                    }
+                    if (ctrl === 1) {
+                        document.getElementById("warnings").innerHTML = "You already marked this dot.";
+                        return 0;
+                    }
+                    document.getElementById("warnings").innerHTML = "";
+                    score = (pos.length/2)*(pos.length/2);
+                    sumScore += score;
+                    document.getElementById("status").innerHTML = "score for your move: " +
+                        score + "<br>" + "total score: " + sumScore;
+                    changeColor();
+                    return 1;
+                }
+            }
+        }
+    }
+
+    //TODO potom neskor aj dorobic zeby sa dajake skore zapisovalo a kometare s ratingom
+
+   function resetMove() {
+        resetValues();
+   }
+    function resetValues() {
+        pos = [];
+        valCol = [];
+        dotCount = 0;
+    }
+
+    function startGame() {
+        createLines();
+        createDots();
+        resetValues();
+        sumScore = 0;
+    }
+
+    function createLines() {
+        ctx.beginPath();
+        for (let i=0;i<7;i++) {
+            ctx.moveTo(i*40,0);
+            ctx.lineTo(i*40,240);
+            }
+        for (let j=0;j<7;j++) {
+            ctx.moveTo(0,j*40);
+            ctx.lineTo(240,j*40);
+        }
+        ctx.stroke();
+    }
+
+    function changeColor() {
+        for (let k=0;k<pos.length/2;k++) {
+            ctx.beginPath();
+            ctx.arc(pos[k*2],pos[(k*2)+1],18,0,6.28318531);
+            ctx.fillStyle = fillDotWColor();
+            ctx.fill();
+        }
+        resetValues();
+    }
+
+    function fillDotWColor() {
+        let color = Math.floor(Math.random() * 5);
+        switch (color) {
+            case 0:
+                return "red";
+            case 1:
+                return "blue";
+            case 2:
+                return "yellow";
+            case 3:
+                return "green";
+            case 4:
+                return "purple";
+        }
+    }
+
+
+    function createDots() {
+        for (let i=0;i<6;i++) {
+            for(let j=0;j<6;j++) {
+                ctx.beginPath();
+                ctx.arc(midX+i*40,midY+j*40,18,0,6.28318531);
+                ctx.fillStyle = fillDotWColor();
+                ctx.fill();
+            }
+        }
+    }
+
+</script>
+</body>
+</html>
